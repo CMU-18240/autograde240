@@ -1,0 +1,222 @@
+#!/usr/bin/python
+
+import commands
+import subprocess
+from subprocess import call
+import os
+import tempfile
+import time
+import sys
+
+################### Run a command with a Timeout #############################
+def runTimeout(command):
+    outFile =  tempfile.SpooledTemporaryFile()
+    proc = subprocess.Popen(command, stdout=outFile, universal_newlines=False, shell = True)
+    wait_remaining_sec = 10
+    timedOut = False
+
+    while proc.poll() is None and wait_remaining_sec > 0:
+        time.sleep(1)
+        wait_remaining_sec -= 1
+
+    if wait_remaining_sec <= 0:
+        os.kill(proc.pid,0)
+        timedOut = True
+
+    # read temp streams from start
+    outFile.seek(0);
+    out = outFile.read()
+    outFile.close()
+    if(timedOut):
+        out = "FAILED: timeout\n" + out
+    return out
+#############################################################################
+
+#NEED TO CHECK WORKING DIRECTORY FOR STAFF
+#NEED TO CHECK STAFF SOLUTION WORKS
+#NEED TO INCLUDE WC OPTION
+
+# Check if current dir is called STAFF
+currentDir = os.getcwd()
+lastSlashIdx = currentDir.rindex("/")
+lastDir = currentDir[lastSlashIdx:]
+if "STAFF" not in lastDir:
+    print("ERROR: not in directory called STAFF")
+    exit(1)
+
+#get student andrew ID's
+andrews = commands.getoutput("ls ..").split("\n") #changed from \r\n to \n 2/19/2015 CN
+andrews.remove('STAFF')
+andrews.insert(0,'STAFF')
+###andrews.remove('Grader')
+
+
+#get files and instanciate datastructures
+rubricFile = open("input.txt")
+fileLines = rubricFile.read().strip().split("\n")
+listOfFiles = [x.split(" ")[::-1] for x in fileLines]
+listOfSingleFiles = [[x[-2], x[-1]] for x in listOfFiles]
+compileDict = dict([[x[-2],(" ").join(x[0:-2])] for x in listOfFiles])
+#print(listOfFiles)
+#print(compileDict)
+rubricFile.close()
+correctFiles = set(zip(*listOfSingleFiles)[0])
+verbose = True #Changed by Carl Nordgren 2/19/15
+finalArrayOfResults = []
+#####################################
+
+for person in andrews:
+    print("Grading: " + person)
+    andrewIDLen = len(person)
+    lineLen = (80 - 2 - andrewIDLen) // 2
+    asterisks = "*" * lineLen
+    border = "*" * 80
+    personName = "\n" + asterisks + " " + person + " " + asterisks
+    if (len(personName) <= 80):
+        personName += "*"
+    personalOutput = "\n" + border + personName + "\n" + border + "\n"
+    fileDict = dict(listOfSingleFiles)
+
+    #Get set of student files
+    files = set(commands.getoutput("ls ../" + person).split("\n"))
+
+    #Get which files are missing
+    missingFiles = correctFiles - files
+    if(len(missingFiles) != 0):
+        personalOutput += "---------- Missing Files ------------"
+        for i in missingFiles:
+            personalOutput += ("\n    " + i)
+        personalOutput += "\n-------------------------------------\n"
+
+    #Find which files still need to be compiled
+    filesToCompile = correctFiles - missingFiles
+    for i in filesToCompile:
+        if(fileDict[i] == 'e'):
+            fileDict[i] = "Passed all tests"
+            filesToCompile = filesToCompile - set([i])
+    for i in missingFiles:
+        fileDict[i] = "File did not exist"
+
+
+    #if they have any files to compile, make a test directory and compile them
+    #check for errors as well
+    filesToRun = filesToCompile
+    if(len(filesToCompile) > 0):
+        os.chdir("../" + person)
+        g = call("mkdir testdir", shell=True)
+        for i in filesToCompile:
+            g = call("cp " + i + " ./testdir/" + i, shell=True)
+        os.chdir("./testdir")
+
+        #Compile files and accumulate errors
+        personalErrorOutput = "\nErrors:"
+        hasErrors = False
+        for i in filesToCompile:
+            extraFile = ""
+            foundModule = False
+            if(len(compileDict[i]) > 3):
+                extraFileList = compileDict[i].split()
+                for file in extraFileList:
+                    if (file == "m"):
+                        foundModule = True
+                        continue
+                    if (foundModule):
+                        specifiedModule = file
+                        foundModule = False
+                        continue
+                    extraFile += "../" + file + " "
+                    #extraFile = "../../STAFF/" + compileDict[i]
+            #print("vcs -sverilog -q " + i + " " + extraFile)
+            compilationResults = commands.getoutput("vcs -sverilog -q " + i + " " + extraFile)
+            if(compilationResults.lower().find("error") != -1):
+                hasErrors = True
+                filesToRun = filesToRun - set([i])
+                fileDict[i] = "Failed to compile alone"
+                personalErrorOutput += "\n--------" + i + " Errors ------------\n"
+                personalErrorOutput += compilationResults
+                personalErrorOutput += "\n----------- " + i + " ----------------\n"
+        if(hasErrors):
+            personalOutput += personalErrorOutput
+        for i in filesToRun:
+            if(fileDict[i] != 'r' and len(fileDict[i]) < 2):
+                fileDict[i] = "Passed all tests"
+                filesToRun = filesToRun - set([i])
+
+
+        #If they have files to run, check that they compile with test files and run them
+        if(len(filesToRun) > 0):
+            for j in filesToRun:
+                extraFile = ""
+                specifiedModule = None
+                if(len(compileDict[j]) > 3):
+                    extraFileList = compileDict[j].split()
+                    foundModule = False
+                    #print(extraFileList)
+                    for file in extraFileList:
+                        if (file == "m"):
+                            foundModule = True
+                            continue
+                        if (foundModule):
+                            specifiedModule = file
+                            foundModule = False
+                            continue
+                        extraFile += "../" + file + " "
+                staffFile = "../../STAFF/" + os.path.splitext(j)[0] + "TEST.sv"
+                vloganOutput = ""
+                if (specifiedModule == None):
+                    compilationResults = commands.getoutput("vcs -sverilog -q " + j + " " + extraFile + " " + staffFile)
+                else:
+                    #print("vlogan -sverilog -nc " + j + " " + extraFile + " " + staffFile)
+                    vloganOutput = commands.getoutput("vlogan -sverilog -nc " + j + " " + extraFile + " " + staffFile)
+                    #print("vcs -q -sverilog -nc " + specifiedModule)
+                    compilationResults = commands.getoutput("vcs -q -sverilog -nc " + specifiedModule)
+                if(vloganOutput.lower().find("error") != -1):
+                    fileDict[j] = "Failed to Compile with specified module"
+                    personalOutput += "\n" + j + " failed to compile specified module."
+                    personalOutput += "\n-------- " + j + " Errors ------------\n"
+                    personalOutput += compilationResults
+                    personalOutput += "\n----------- " + j + " ----------------\n"
+                elif(compilationResults.lower().find("error") != -1):
+                    fileDict[j] = "Failed to Compile with TA Test"
+                    personalOutput += "\n" + j + " failed to compile with TA testbench."
+                    personalOutput += "\n-------- " + j + " Errors ------------\n"
+                    personalOutput += compilationResults
+                    personalOutput += "\n----------- " + j + " ----------------\n"
+
+                #They compile! So run them!
+                else:
+                    testResults = runTimeout("./simv -nc")
+                    if(testResults.lower().find("fail") != -1):
+                        fileDict[j] = "Failed to produce correct output"
+                        personalOutput += "\nFailed TA Testbench for file:" + j + "\n"# added \n; CN 2/19/15
+                        # should give students feedback into what test they failed
+                        personalOutput += testResults +"\n" #Added by Carl Nordgren 2/19/2014
+                    else:
+                        fileDict[j] = "Passed all tests"
+
+        #Cleanup
+        os.chdir("..")
+        g = commands.getoutput("rm -r ./testdir")
+        os.chdir("../STAFF")
+
+    #Prepares succinct output
+    dictResults = ""
+    for i in fileDict:
+        dictResults += i + ":" + fileDict[i] + "\n"
+    print(dictResults)
+    #Choose which output to use
+    if(verbose):
+        finalArrayOfResults.append(personalOutput)
+    else:
+        finalArrayOfResults.append(person + ":\n" + dictResults)
+
+    #Write to personal file
+    f = open("../" + person + "/AutoGraderResults.txt", 'w')
+    f.write(personalOutput)
+    f.close()
+
+#Write to TA file
+g = open('results.txt', 'w')
+for i in finalArrayOfResults:
+    g.write(i)
+g.close()
