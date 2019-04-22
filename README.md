@@ -10,11 +10,9 @@ near future.
 - more robust error checking
 - better defined input files
 
-## Requirements
-TODO
+## Requirements (WIP)
 - Python 2.7.5 or newer Python 2 installs
 - Synopsys VCS
 
-## Usage
-TODO
+## Usage (WIP)
 Run the `autograde240` executable inside of a folder named `STAFF`.
