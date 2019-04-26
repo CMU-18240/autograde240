@@ -34,23 +34,23 @@ Run the `autograde240` executable inside of the `STAFF` folder.
 ## Config files
 All config files must be of the `.json` format, and structured like so:
 ```json
-{                                   // main config object
-    "assignment": "hwX",            // string
-    "rubric": [                     // array of rubric item objects
-        {                           // rubric item object
-            "problem": 1,           // number
-            "files": null,          // array of strings, each being the file
-                                       name that the students should have
-                                       submitted
-            "modules": null,        // array of strings, each being the module
-                                       that should exist in their files
-            "tb_files": null,       // array of strings, each being the file
-                                       where testbenches are written
-            "testbenches": null     // array of strings, each being the name of
-                                       the testbenches to run student code against
+{                                   # main config object
+    "assignment": "hwX",            # string
+    "rubric": [                     # array of rubric item objects
+        {                           # rubric item object
+            "problem": 1,           # number
+            "files": null,          # array of strings, each being the file
+                                      name that the students should have
+                                      submitted
+            "modules": null,        # array of strings, each being the module
+                                      that should exist in their files
+            "tb_files": null,       # array of strings, each being the file
+                                      where testbenches are written
+            "testbenches": null     # array of strings, each being the name of
+                                      the testbenches to run student code against
         }
     ]
 }
 ```
-Where the text following the `//` denotes the data type and a brief description.
+Where the text following the `#` denotes the data type and a brief description.
 
