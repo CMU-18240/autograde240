@@ -207,12 +207,12 @@ def write_results(person, errs, summary_fd):
     name_line = '{} {} {}'.format(stars, person, stars)
     if len(name_line) < 80:
         name_line += '*'
-    text = '\n\n{}\n{}\n\n'.format(name_line, border)
+    text = '{}\n{}\n\n'.format(name_line, border)
 
     if len(errs) == 0:
         text += 'All tests passed!\n'
     else:
-        text += errs
+        text += errs + '\n\n'
     text = text.strip()
     fd = open('ag240_results.txt', 'wb')
     fd.write(text)
