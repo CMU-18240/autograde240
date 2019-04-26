@@ -34,23 +34,57 @@ Run the `autograde240` executable inside of the `STAFF` folder.
 ## Config files
 All config files must be of the `.json` format, and structured like so:
 ```json
-{                                   # main config object
-    "assignment": "hwX",            # string
-    "rubric": [                     # array of rubric item objects
-        {                           # rubric item object
-            "problem": 1,           # number
-            "files": null,          # array of strings, each being the file
-                                      name that the students should have
-                                      submitted
-            "modules": null,        # array of strings, each being the module
-                                      that should exist in their files
-            "tb_files": null,       # array of strings, each being the file
-                                      where testbenches are written
-            "testbenches": null     # array of strings, each being the name of
-                                      the testbenches to run student code against
+{
+    "assignment": "hwX",
+    "rubric": [
+        {
+            "problem": 1,
+            "files": null,
+
+
+            "modules": null,
+
+            "tb_files": null,
+
+            "testbenches": null
+
         }
     ]
 }
 ```
-Where the text following the `#` denotes the data type and a brief description.
+### `assignment`
+Type: `string`
+
+The name of the assignment being graded.
+
+### `rubric`
+Type: `[object]`
+
+An array of rubric elements, each element describing some part of the problem.
+
+#### `problem`
+Type: `int`
+
+Number of problem being graded
+
+#### `files`
+Type: `[str]`
+
+Array of files that each student should have submitted.
+
+#### `modules`
+Type: `[str]`
+
+Array of module names that students should have written.
+
+#### `tb_files`
+Type: `[str]`
+
+Array of files the autograder testbenches are described in. *These files should
+be located inside of the `STAFF` folder*.
+
+#### `testbenches`
+Type: `[str]`
+
+Array of testbench module names.
 
