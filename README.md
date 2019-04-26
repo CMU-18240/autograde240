@@ -83,3 +83,7 @@ Type: `[str]`
 
 Array of testbench module names.
 
+## Testbench requirements
+The requirements for the autograder testbenches are quite lax. You can do
+whatever you wish, so long as you output the string `error` (case-insensitive)
+whenever the solution is wrong.
