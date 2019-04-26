@@ -77,7 +77,7 @@ class RubricItem:
         self.tb_files = json_obj['tb_files']
         self.tbs = json_obj['testbenches']
         self.has_err = False
-        self.err = make_header('\nProblem {}'.format(self.prob),
+        self.err = '\n' + make_header('Problem {}'.format(self.prob),
                 RubricItem.line_len, RubricItem.line_char) + '\n'
         self.to_print = 'Problem {}: '.format(self.prob)
 
