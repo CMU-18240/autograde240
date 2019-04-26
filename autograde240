@@ -1,19 +1,39 @@
 #!/usr/bin/python
 
-import commands
+import textcolor as tc
+import argparse
 import subprocess
 from subprocess import call
+import sys
+import shutil
 import os
 import tempfile
 import time
 import sys
+import json
 
-################### Run a command with a Timeout #############################
-def runTimeout(command):
-    outFile =  tempfile.SpooledTemporaryFile()
-    proc = subprocess.Popen(command, stdout=outFile, universal_newlines=False, shell = True)
-    wait_remaining_sec = 10
-    timedOut = False
+# Constants for this script
+###########################
+TIMEOUT     = 10    # simulation timeout, in seconds
+
+# Utility functions
+###################
+def make_header(text, header_len, header_char='*'):
+    header = ' {} '.format(text)
+    side_len = (header_len - len(header)) // 2
+    sides = header_char * side_len
+    header = sides + header + sides
+    if len(header) < header_len:
+        header += header_char
+    return header
+
+def run_timeout(command):
+    out_file =  tempfile.SpooledTemporaryFile()
+    proc = subprocess.Popen(command, stdout=out_file, universal_newlines=False,
+                            shell = True)
+    # timeout, in seconds
+    wait_remaining_sec = TIMEOUT
+    timed_out = False
 
     while proc.poll() is None and wait_remaining_sec > 0:
         time.sleep(1)
@@ -21,202 +41,373 @@ def runTimeout(command):
 
     if wait_remaining_sec <= 0:
         os.kill(proc.pid,0)
-        timedOut = True
+        timed_out = True
 
     # read temp streams from start
-    outFile.seek(0);
-    out = outFile.read()
-    outFile.close()
-    if(timedOut):
+    out_file.seek(0);
+    out = out_file.read()
+    out_file.close()
+    if(timed_out):
         out = "FAILED: timeout\n" + out
     return out
-#############################################################################
 
-#NEED TO CHECK WORKING DIRECTORY FOR STAFF
-#NEED TO CHECK STAFF SOLUTION WORKS
-#NEED TO INCLUDE WC OPTION
+def pad_str(s, length, direction='l', trunc=True):
+    fmt = '{:';
+    d = direction.lower()
+    if d == 'r':    # right align
+        fmt += '>'
+    elif d == 'c':  # center align
+        fmt += '^'
+    else:           # left align
+        fmt += ''
+    fmt += str(length)
+    if (trunc):
+        fmt += '.' + str(length)
+    fmt += '}'
+    return fmt.format(s)
 
-# Check if current dir is called STAFF
-currentDir = os.getcwd()
-lastSlashIdx = currentDir.rindex("/")
-lastDir = currentDir[lastSlashIdx:]
-if "STAFF" not in lastDir:
-    print("ERROR: not in directory called STAFF")
-    exit(1)
+class RubricItem:
+    line_len = 40
+    line_char = '-'
 
-#get student andrew ID's
-andrews = commands.getoutput("ls ..").split("\n") #changed from \r\n to \n 2/19/2015 CN
-andrews.remove('STAFF')
-andrews.insert(0,'STAFF')
-###andrews.remove('Grader')
+    def __init__(self, json_obj):
+        self.prob = json_obj['problem']
+        self.files = json_obj['files']
+        self.modules = json_obj['modules']
+        self.tb_files = json_obj['tb_files']
+        self.tbs = json_obj['testbenches']
+        self.has_err = False
+        self.err = make_header('\nProblem {}'.format(self.prob),
+                RubricItem.line_len, RubricItem.line_char) + '\n'
+        self.to_print = 'Problem {}: '.format(self.prob)
 
+    def reset(self):
+        self.has_err = False
+        self.err = make_header('Problem {}'.format(self.prob),
+                RubricItem.line_len, RubricItem.line_char) + '\n'
+        self.to_print = 'Problem {}: '.format(self.prob)
 
-#get files and instanciate datastructures
-rubricFile = open("input.txt")
-fileLines = rubricFile.read().strip().split("\n")
-listOfFiles = [x.split(" ")[::-1] for x in fileLines]
-listOfSingleFiles = [[x[-2], x[-1]] for x in listOfFiles]
-compileDict = dict([[x[-2],(" ").join(x[0:-2])] for x in listOfFiles])
-#print(listOfFiles)
-#print(compileDict)
-rubricFile.close()
-correctFiles = set(zip(*listOfSingleFiles)[0])
-verbose = True #Changed by Carl Nordgren 2/19/15
-finalArrayOfResults = []
-#####################################
+    def check_exists(self):
+        if self.files == None:
+            return
+        err_s = 'Missing files:\n'
+        for f in self.files:
+            if (not os.path.exists(f)):
+                self.has_err = True
+                err_s += '\t{}\n'.format(f)
+        if (self.has_err):
+            self.err += err_s
+            self.to_print += tc.format_str('missing files', 'red')
 
-for person in andrews:
-    print("Grading: " + person)
-    andrewIDLen = len(person)
-    lineLen = (80 - 2 - andrewIDLen) // 2
-    asterisks = "*" * lineLen
-    border = "*" * 80
-    personName = "\n" + asterisks + " " + person + " " + asterisks
-    if (len(personName) <= 80):
-        personName += "*"
-    personalOutput = "\n" + border + personName + "\n" + border + "\n"
-    fileDict = dict(listOfSingleFiles)
+    def run_vlogan(self, f_list):
+        vlogan_cmd = ['vlogan', '-sverilog', '-nc', '-q']
+        try:
+            to_run = vlogan_cmd + f_list
+            out = subprocess.check_output(to_run, stderr=subprocess.STDOUT)
+            return True
+        except subprocess.CalledProcessError as e:
+            self.has_err = True
+            self.err += 'vlogan error:\n\n' + e.output + '\n'
+            return False
 
-    #Get set of student files
-    files = set(commands.getoutput("ls ../" + person).split("\n"))
+    def run_vcs(self, m_list):
+        vcs_cmd = ['vcs', '-sverilog', '-nc', '-q']
+        has_errors = False
+        for module in m_list:
+            try:
+                to_run = vcs_cmd + [module]
+                out = subprocess.check_output(to_run, stderr=subprocess.STDOUT)
+            except subprocess.CalledProcessError as e:
+                self.has_err = True
+                has_errors = True
+                self.err += 'vcs error:\n\n' + e.output + '\n'
+        return not has_errors
 
-    #Get which files are missing
-    missingFiles = correctFiles - files
-    if(len(missingFiles) != 0):
-        personalOutput += "---------- Missing Files ------------"
-        for i in missingFiles:
-            personalOutput += ("\n    " + i)
-        personalOutput += "\n-------------------------------------\n"
+    def check_compile(self):
+        # first check vlogan compilation
+        passed_vlogan = self.run_vlogan(self.files)
+        if not passed_vlogan:
+            self.to_print += tc.format_str('unable to compile on its own', 'red')
+            return
 
-    #Find which files still need to be compiled
-    filesToCompile = correctFiles - missingFiles
-    for i in filesToCompile:
-        if(fileDict[i] == 'e'):
-            fileDict[i] = "Passed all tests"
-            filesToCompile = filesToCompile - set([i])
-    for i in missingFiles:
-        fileDict[i] = "File did not exist"
+        # now check vcs compilation for all modules
+        passed_vcs = self.run_vcs(self.modules)
+        if not passed_vcs:
+            self.to_print += tc.format_str('unable to compile all listed modules',
+                                            'red')
 
+    def check_tb(self):
+        # first check vlogan compilation
+        passed_vlogan = self.run_vlogan(self.files + self.tb_files)
+        if not passed_vlogan:
+            self.to_print += tc.format_str('unable to compile with TA files',
+                                            'red')
+            return
 
-    #if they have any files to compile, make a test directory and compile them
-    #check for errors as well
-    filesToRun = filesToCompile
-    if(len(filesToCompile) > 0):
-        os.chdir("../" + person)
-        g = call("mkdir testdir", shell=True)
-        for i in filesToCompile:
-            g = call("cp " + i + " ./testdir/" + i, shell=True)
-        os.chdir("./testdir")
+        # now check vcs compilation for all modules
+        passed_vcs = self.run_vcs(self.tbs)
+        if not passed_vcs:
+            self.to_print += tc.format_str('unable to compile with TA files',
+                                            'red')
+            return
 
-        #Compile files and accumulate errors
-        personalErrorOutput = "\nErrors:"
-        hasErrors = False
-        for i in filesToCompile:
-            extraFile = ""
-            foundModule = False
-            if(len(compileDict[i]) > 3):
-                extraFileList = compileDict[i].split()
-                for file in extraFileList:
-                    if (file == "m"):
-                        foundModule = True
-                        continue
-                    if (foundModule):
-                        specifiedModule = file
-                        foundModule = False
-                        continue
-                    extraFile += "../" + file + " "
-                    #extraFile = "../../STAFF/" + compileDict[i]
-            #print("vcs -sverilog -q " + i + " " + extraFile)
-            compilationResults = commands.getoutput("vcs -sverilog -q " + i + " " + extraFile)
-            if(compilationResults.lower().find("error") != -1):
-                hasErrors = True
-                filesToRun = filesToRun - set([i])
-                fileDict[i] = "Failed to compile alone"
-                personalErrorOutput += "\n--------" + i + " Errors ------------\n"
-                personalErrorOutput += compilationResults
-                personalErrorOutput += "\n----------- " + i + " ----------------\n"
-        if(hasErrors):
-            personalOutput += personalErrorOutput
-        for i in filesToRun:
-            if(fileDict[i] != 'r' and len(fileDict[i]) < 2):
-                fileDict[i] = "Passed all tests"
-                filesToRun = filesToRun - set([i])
+        # run simulation executable
+        all_tests_pass = True
+        for tb in self.tbs:
+            passed_vcs = self.run_vcs([tb])
+            if not passed_vcs:
+                self.to_print += tc.format_str('unable to compile with TA files',
+                                            'red')
+                continue
+            result = run_timeout('./simv')
+            if 'error' in result.lower():
+                all_tests_pass = False
+                self.has_err = True
+                self.err += 'Fails TB: {}\n'.format(tb) + result
+        if not all_tests_pass:
+            self.to_print += tc.format_str('fails TA testbenches', 'red')
 
+    def do(self):
+        if not (self.files == None):
+            self.check_exists()
+        if not ((self.modules == None) or (self.has_err)):
+            self.check_compile()
+        if not ((self.tbs == None) or (self.has_err)):
+            self.check_tb()
 
-        #If they have files to run, check that they compile with test files and run them
-        if(len(filesToRun) > 0):
-            for j in filesToRun:
-                extraFile = ""
-                specifiedModule = None
-                if(len(compileDict[j]) > 3):
-                    extraFileList = compileDict[j].split()
-                    foundModule = False
-                    #print(extraFileList)
-                    for file in extraFileList:
-                        if (file == "m"):
-                            foundModule = True
-                            continue
-                        if (foundModule):
-                            specifiedModule = file
-                            foundModule = False
-                            continue
-                        extraFile += "../" + file + " "
-                staffFile = "../../STAFF/" + os.path.splitext(j)[0] + "TEST.sv"
-                vloganOutput = ""
-                if (specifiedModule == None):
-                    compilationResults = commands.getoutput("vcs -sverilog -q " + j + " " + extraFile + " " + staffFile)
-                else:
-                    #print("vlogan -sverilog -nc " + j + " " + extraFile + " " + staffFile)
-                    vloganOutput = commands.getoutput("vlogan -sverilog -nc " + j + " " + extraFile + " " + staffFile)
-                    #print("vcs -q -sverilog -nc " + specifiedModule)
-                    compilationResults = commands.getoutput("vcs -q -sverilog -nc " + specifiedModule)
-                if(vloganOutput.lower().find("error") != -1):
-                    fileDict[j] = "Failed to Compile with specified module"
-                    personalOutput += "\n" + j + " failed to compile specified module."
-                    personalOutput += "\n-------- " + j + " Errors ------------\n"
-                    personalOutput += compilationResults
-                    personalOutput += "\n----------- " + j + " ----------------\n"
-                elif(compilationResults.lower().find("error") != -1):
-                    fileDict[j] = "Failed to Compile with TA Test"
-                    personalOutput += "\n" + j + " failed to compile with TA testbench."
-                    personalOutput += "\n-------- " + j + " Errors ------------\n"
-                    personalOutput += compilationResults
-                    personalOutput += "\n----------- " + j + " ----------------\n"
+        if not (self.has_err):
+            self.to_print += tc.format_str('all tests passed!', 'green')
+        self.err += RubricItem.line_char * RubricItem.line_len + '\n'
 
-                #They compile! So run them!
-                else:
-                    testResults = runTimeout("./simv -nc")
-                    if(testResults.lower().find("fail") != -1):
-                        fileDict[j] = "Failed to produce correct output"
-                        personalOutput += "\nFailed TA Testbench for file:" + j + "\n"# added \n; CN 2/19/15
-                        # should give students feedback into what test they failed
-                        personalOutput += testResults +"\n" #Added by Carl Nordgren 2/19/2014
-                    else:
-                        fileDict[j] = "Passed all tests"
+    def get_err(self):
+        if self.has_err:
+            return self.err
+        else:
+            return ''
 
-        #Cleanup
-        os.chdir("..")
-        g = commands.getoutput("rm -r ./testdir")
-        os.chdir("../STAFF")
+    def get_print_msg(self):
+        return self.to_print
 
-    #Prepares succinct output
-    dictResults = ""
-    for i in fileDict:
-        dictResults += i + ":" + fileDict[i] + "\n"
-    print(dictResults)
-    #Choose which output to use
-    if(verbose):
-        finalArrayOfResults.append(personalOutput)
+def parse_json(json_path):
+    if (not os.path.exists(json_path)):
+        return None
+    fd = open(json_path, 'r')
+    try:
+        return json.load(fd)
+    except Exception as e:
+        return None
+    finally:
+        fd.close()
+
+def write_results(person, errs, summary_fd):
+    # print out header for person
+    line_len = (80 - 2 - len(person)) // 2
+    stars = '*' * line_len
+    border = '*' * 80
+    name_line = '{} {} {}'.format(stars, person, stars)
+    if len(name_line) < 80:
+        name_line += '*'
+    text = '\n\n{}\n{}\n\n'.format(name_line, border)
+
+    if len(errs) == 0:
+        text += 'All tests passed!\n'
     else:
-        finalArrayOfResults.append(person + ":\n" + dictResults)
+        text += errs
+    text = text.strip()
+    fd = open('autograde_results.txt', 'wb')
+    fd.write(text)
+    fd.close()
+    if len(errs) > 0:
+        summary_fd.write(text)
 
-    #Write to personal file
-    f = open("../" + person + "/AutoGraderResults.txt", 'w')
-    f.write(personalOutput)
-    f.close()
+def grade_person(person, rubric, summary_fd):
+    temp_dir = tempfile.mkdtemp()
+    try:
+        os.chdir('../{}'.format(person))
+        student_dir = os.getcwd()
+        sim_dir = '{}/__grade240'.format(temp_dir)
+        shutil.copytree(student_dir, sim_dir)
+        os.chdir(sim_dir)
 
-#Write to TA file
-g = open('results.txt', 'w')
-for i in finalArrayOfResults:
-    g.write(i)
-g.close()
+        errs = ''       # no errs if this is empty
+        for item in rubric:
+            for tb in item.tb_files:
+                shutil.copy('{}/{}'.format(STAFF_DIR, tb), os.getcwd())
+            item.do()
+            errs += item.get_err()
+            if (VERBOSE):
+                print('\t' + item.get_print_msg())
+            item.reset()
+
+        os.chdir(student_dir)
+        write_results(person, errs, summary_fd)
+        return len(errs) == 0
+    except (Exception, KeyboardInterrupt, SystemExit):
+        raise
+    finally:
+        os.chdir(STAFF_DIR)
+        shutil.rmtree(temp_dir)
+
+def json2rubric(json):
+    rubric = []
+    for item in json['rubric']:
+        r_item = RubricItem(item)
+        rubric.append(r_item)
+    return rubric
+
+def get_args():
+    parser = argparse.ArgumentParser(description='Grade 240 assignments')
+    parser.add_argument('-v', '--verbose', dest='verbose', action='store_true')
+    parser.add_argument('-c', '--config', dest='config', action='store',
+                        default='config.json',
+                        help='path to config JSON file')
+    parser.add_argument('-n', '--dryrun', dest='dry', action='store_true',
+                        help='only grade STAFF solution')
+    parser.add_argument('-f', '--force', dest='force', action='store_true',
+                        help='override autograde check for STAFF solution')
+    return parser.parse_args()
+
+def make_summ_table(passed, failed):
+    # width of entire table
+    width = 30
+    no_cols = 2
+    data_rows = max(len(passed), len(failed))
+    inner_col_width = width - (no_cols - 1) - 2
+    result = ''
+
+    col_header_line = '-' * inner_col_width
+    header_border = '+{}+{}+'
+    header_border = header_border.format(col_header_line, col_header_line)
+    result += header_border + '\n'
+
+    col_fmt = '|{}|{}|'
+    pad_col1 = pad_str('Passed', inner_col_width, 'c')
+    pad_col2 = pad_str('Failed', inner_col_width, 'c')
+    header = col_fmt.format(pad_col1, pad_col2)
+    result += header + '\n' + header_border + '\n'
+
+    for i in range(data_rows):
+        if i < len(passed):
+            col1 = passed[i]
+        else:
+            col1 = ''
+        if i < len(failed):
+            col2 = failed[i]
+        else:
+            col2 = ''
+        col1 = pad_str(col1, inner_col_width, 'c')
+        col2 = pad_str(col2, inner_col_width, 'c')
+        result += col_fmt.format(col1, col2) + '\n'
+
+    return result + header_border + '\n'
+
+def print_start():
+    length = 30
+    border = '+{}+\n'.format('-' * (length - 2))
+    title = 'autograde240 - {}'.format(HWNUM)
+    padded = pad_str(title, length - 2, 'c')
+    middle = '|{}|\n'.format(padded)
+    print(border + middle + border)
+
+def main():
+    args = get_args()
+    global VERBOSE
+    VERBOSE = args.verbose
+    global FORCED
+    FORCED = args.force
+    global DRY
+    DRY = args.dry
+    json_path = args.config
+
+    # check if current dir is called STAFF
+    current_dir = os.getcwd()
+    base_name = os.path.basename(current_dir)
+    if (not base_name == "STAFF"):
+        print("ERROR: not in directory called STAFF")
+        return 1
+    global STAFF_DIR
+    STAFF_DIR = current_dir
+
+    # get student andrew IDs
+    andrews = subprocess.check_output(['ls', '..']).strip().split('\n')
+    andrews.remove('STAFF')
+
+    config = parse_json(json_path)
+    if (config == None):
+        print('ERROR: unable to parse config: {}'.format(json_path))
+        return 1
+    global HWNUM
+    HWNUM = config['assignment']
+    rubric = json2rubric(config)
+
+    if not DRY:
+        summary_fd = open('{}/summary.txt'.format(STAFF_DIR), 'wb')
+    summary_tmp = tempfile.TemporaryFile()
+    try:
+        print_start()
+        print(pad_str('Grading {}: '.format('STAFF'), 20)),
+        sys.stdout.flush()
+        if VERBOSE:
+            print('')
+
+        staff_passed = grade_person('STAFF', rubric, summary_tmp)
+        if (not FORCED) and (not staff_passed):
+            print(tc.format_str('STAFF fails autograde, exiting', 'red'))
+            return 1
+        elif (staff_passed) and (not VERBOSE):
+            print(tc.format_str('Passed', 'green'))
+
+        pass_students = []
+        fail_students = []
+        for person in andrews:
+            if (DRY):
+                break
+            print(pad_str('Grading {}: '.format(person), 20)),
+            if VERBOSE:
+                print('')
+            sys.stdout.flush()
+            passed = grade_person(person, rubric, summary_tmp)
+            if passed:
+                pass_students.append(person)
+                if not VERBOSE:
+                    print(tc.format_str('Passed', 'green'))
+            else:
+                fail_students.append(person)
+                if not VERBOSE:
+                    print(tc.format_str('Failed', 'red'))
+
+        tbl = make_summ_table(pass_students, fail_students)
+        print('\n' + tbl)
+
+        if not DRY:
+            summ_hdr = make_header('Summary for {}'.format(HWNUM), 80) + '\n'
+            summary_fd.write(summ_hdr)
+            summary_fd.write(tbl)
+            summary_tmp.seek(0)
+            summary_fd.write(summary_tmp.read())
+
+        print('\nAutograding complete.')
+        if not DRY:
+            print(tc.format_str('Results written to summary.txt', 'line'))
+        return 0
+    except TypeError as e:
+        print('TypeError: please check that the config file is valid')
+        raise
+        return 1
+    except ValueError as e:
+        print('ValueError: please check that the config file is valid')
+        raise
+        return 1
+    except Exception as e:
+        print('Encountered an unexpected exception:')
+        raise
+        return 1
+    except (KeyboardInterrupt, SystemExit):
+        sys.exit()
+    finally:
+        summary_tmp.close()
+        if not DRY:
+            summary_fd.close()
+
+if __name__ == "__main__":
+   sys.exit(main())
