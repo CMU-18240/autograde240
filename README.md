@@ -40,14 +40,9 @@ All config files must be of the `.json` format, and structured like so:
         {
             "problem": 1,
             "files": null,
-
-
             "modules": null,
-
             "tb_files": null,
-
             "testbenches": null
-
         }
     ]
 }
