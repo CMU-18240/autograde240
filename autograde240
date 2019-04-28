@@ -5,6 +5,7 @@ import argparse
 import subprocess
 from subprocess import call
 import sys
+import signal
 import shutil
 import os
 import tempfile
@@ -29,8 +30,8 @@ def make_header(text, header_len, header_char='*'):
 
 def run_timeout(command):
     out_file =  tempfile.SpooledTemporaryFile()
-    proc = subprocess.Popen(command, stdout=out_file, universal_newlines=False,
-                            shell = True)
+    proc = subprocess.Popen(command, stdout=out_file, stderr=out_file,
+                            shell = True, preexec_fn=os.setsid)
     # timeout, in seconds
     wait_remaining_sec = TIMEOUT
     timed_out = False
@@ -40,7 +41,7 @@ def run_timeout(command):
         wait_remaining_sec -= 1
 
     if wait_remaining_sec <= 0:
-        os.kill(proc.pid,0)
+        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
         timed_out = True
 
     # read temp streams from start
@@ -210,10 +211,10 @@ def write_results(person, errs, summary_fd):
     text = '{}\n{}\n\n'.format(name_line, border)
 
     if len(errs) == 0:
-        text += 'All tests passed!\n'
+        text += 'All tests passed!\n\n'
     else:
         text += errs + '\n\n'
-    text = text.rstrip()
+    text = text.lstrip()
     fd = open('ag240_results.txt', 'wb')
     fd.write(text)
     fd.close()
