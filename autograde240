@@ -213,7 +213,7 @@ def write_results(person, errs, summary_fd):
         text += 'All tests passed!\n'
     else:
         text += errs + '\n\n'
-    text = text.strip()
+    text = text.rstrip()
     fd = open('ag240_results.txt', 'wb')
     fd.write(text)
     fd.close()
@@ -231,8 +231,9 @@ def grade_person(person, rubric, summary_fd):
 
         errs = ''       # no errs if this is empty
         for item in rubric:
-            for tb in item.tb_files:
-                shutil.copy('{}/{}'.format(STAFF_DIR, tb), os.getcwd())
+            if item.tb_files != None:
+                for tb in item.tb_files:
+                    shutil.copy('{}/{}'.format(STAFF_DIR, tb), os.getcwd())
             item.do()
             errs += item.get_err()
             if (VERBOSE):
