@@ -16,6 +16,9 @@ import json
 # Constants for this script
 ###########################
 SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
+# Names for files
+RESULT_FILE = 'results_ag240.txt'
+SUMM_FILE   = 'summary_ag240.txt'
 TIMEOUT     = 10    # simulation timeout, in seconds
 
 # Utility functions
@@ -220,7 +223,7 @@ def write_results(person, errs, summary_fd):
     else:
         text += errs + '\n\n'
     text = text.lstrip()
-    fd = open('ag240_results.txt', 'wb')
+    fd = open(RESULT_FILE, 'wb')
     fd.write(text)
     fd.close()
     if len(errs) > 0:
@@ -354,7 +357,7 @@ def main():
     rubric = json2rubric(config)
 
     if not DRY:
-        summary_fd = open('{}/ag240_summary.txt'.format(STAFF_DIR), 'wb')
+        summary_fd = open('{}/{}'.format(STAFF_DIR, SUMM_FILE), 'wb')
     summary_tmp = tempfile.TemporaryFile()
     try:
         print_start()
@@ -401,7 +404,7 @@ def main():
 
         print('\nAutograding complete.')
         if not DRY:
-            print(tc.format_str('Results written to ag240_summary.txt', 'line'))
+            print(tc.format_str('Results written to {}'.format(SUMM_FILE), 'line'))
         return 0
     except TypeError as e:
         print('TypeError: please check that the config file is valid')
