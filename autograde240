@@ -15,6 +15,7 @@ import json
 
 # Constants for this script
 ###########################
+SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
 TIMEOUT     = 10    # simulation timeout, in seconds
 
 # Utility functions
@@ -189,6 +190,10 @@ class RubricItem:
     def get_print_msg(self):
         return self.to_print
 
+def generate_example(outfile):
+    ref_file = '{}/example_cfg.json'.format(SCRIPT_PATH)
+    shutil.copyfile(ref_file, outfile)
+
 def parse_json(json_path):
     if (not os.path.exists(json_path)):
         return None
@@ -267,6 +272,9 @@ def get_args():
                         help='only grade STAFF solution')
     parser.add_argument('-f', '--force', dest='force', action='store_true',
                         help='override autograde check for STAFF solution')
+    parser.add_argument('-g', '--generate_cfg', dest='ex_cfg', action='store',
+                        const='cfg_example.json', default=None, nargs='?',
+                        help='generate an example config JSON file')
     return parser.parse_args()
 
 def make_summ_table(passed, failed):
@@ -313,6 +321,9 @@ def print_start():
 
 def main():
     args = get_args()
+    if args.ex_cfg != None:
+        generate_example(args.ex_cfg)
+        return 0
     global VERBOSE
     VERBOSE = args.verbose
     global FORCED
