@@ -19,7 +19,7 @@ SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
 # Names for files
 RESULT_FILE = 'results_ag240.txt'
 SUMM_FILE   = 'summary_ag240.txt'
-TIMEOUT     = 10    # simulation timeout, in seconds
+TIMEOUT     = 60    # simulation timeout, in seconds
 
 # Utility functions
 ###################
@@ -232,6 +232,9 @@ def write_results(person, errs, summary_fd):
 def grade_person(person, rubric, summary_fd):
     temp_dir = tempfile.mkdtemp()
     try:
+        bad_dir = False
+        if (not os.path.isdir('../{}'.format(person))):
+            bad_dir = True
         os.chdir('../{}'.format(person))
         student_dir = os.getcwd()
         sim_dir = '{}/__grade240'.format(temp_dir)
@@ -239,15 +242,18 @@ def grade_person(person, rubric, summary_fd):
         os.chdir(sim_dir)
 
         errs = ''       # no errs if this is empty
-        for item in rubric:
-            if item.tb_files != None:
-                for tb in item.tb_files:
-                    shutil.copy('{}/{}'.format(STAFF_DIR, tb), os.getcwd())
-            item.do()
-            errs += item.get_err()
-            if (VERBOSE):
-                print('\t' + item.get_print_msg())
-            item.reset()
+        if (bad_dir):
+            errs += 'ERROR: {} is not a directory'.format(person)
+        else:
+            for item in rubric:
+                if item.tb_files != None:
+                    for tb in item.tb_files:
+                        shutil.copy('{}/{}'.format(STAFF_DIR, tb), os.getcwd())
+                item.do()
+                errs += item.get_err()
+                if (VERBOSE):
+                    print('\t' + item.get_print_msg())
+                item.reset()
 
         os.chdir(student_dir)
         write_results(person, errs, summary_fd)
@@ -273,6 +279,8 @@ def get_args():
                         help='path to config JSON file')
     parser.add_argument('-n', '--dryrun', dest='dry', action='store_true',
                         help='only grade STAFF solution')
+    parser.add_argument('-s', '--students', nargs='+',
+                        help='pick student(s) to run autograde240 on')
     parser.add_argument('-f', '--force', dest='force', action='store_true',
                         help='override autograde check for STAFF solution')
     parser.add_argument('-g', '--generate_cfg', dest='ex_cfg', action='store',
@@ -334,6 +342,7 @@ def main():
     global DRY
     DRY = args.dry
     json_path = args.config
+    specifics = args.students
 
     # check if current dir is called STAFF
     current_dir = os.getcwd()
@@ -375,22 +384,43 @@ def main():
 
         pass_students = []
         fail_students = []
-        for person in andrews:
-            if (DRY):
-                break
-            print(pad_str('Grading {}: '.format(person), 20)),
-            if VERBOSE:
-                print('')
-            sys.stdout.flush()
-            passed = grade_person(person, rubric, summary_tmp)
-            if passed:
-                pass_students.append(person)
-                if not VERBOSE:
-                    print(tc.format_str('Passed', 'green'))
-            else:
-                fail_students.append(person)
-                if not VERBOSE:
-                    print(tc.format_str('Failed', 'red'))
+        if (specifics):
+            for person in specifics:
+                if (person not in andrews):
+                    print('ERROR: specified student {} not found in submission directory'.format(person))
+                    continue
+                if (DRY):
+                    break
+                print(pad_str('Grading {}: '.format(person), 20)),
+                if VERBOSE:
+                    print('')
+                sys.stdout.flush()
+                passed = grade_person(person, rubric, summary_tmp)
+                if passed:
+                    pass_students.append(person)
+                    if not VERBOSE:
+                        print(tc.format_str('Passed', 'green'))
+                else:
+                    fail_students.append(person)
+                    if not VERBOSE:
+                        print(tc.format_str('Failed', 'red'))
+        else:
+            for person in andrews:
+                if (DRY):
+                    break
+                print(pad_str('Grading {}: '.format(person), 20)),
+                if VERBOSE:
+                    print('')
+                sys.stdout.flush()
+                passed = grade_person(person, rubric, summary_tmp)
+                if passed:
+                    pass_students.append(person)
+                    if not VERBOSE:
+                        print(tc.format_str('Passed', 'green'))
+                else:
+                    fail_students.append(person)
+                    if not VERBOSE:
+                        print(tc.format_str('Failed', 'red'))
 
         tbl = make_summ_table(pass_students, fail_students)
         print('\n' + tbl)
