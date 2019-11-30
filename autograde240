@@ -354,8 +354,15 @@ def main():
     STAFF_DIR = current_dir
 
     # get student andrew IDs
-    andrews = subprocess.check_output(['ls', '..']).strip().split('\n')
-    andrews.remove('STAFF')
+    andrews_old = subprocess.check_output(['ls', '..']).strip().split('\n')
+    andrews = []
+    # preprocess student directories
+    for andrew in andrews_old:
+        if (andrew == 'STAFF'):
+            continue
+        # only add to andrews if it is a directory
+        if (os.path.isdir('../' + andrew)):
+            andrews.append(andrew)
 
     config = parse_json(json_path)
     if (config == None):
