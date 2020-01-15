@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/local/bin/python3
 
 import textcolor as tc
 import argparse
@@ -19,7 +19,6 @@ SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
 # Names for files
 RESULT_FILE = 'results_ag240.txt'
 SUMM_FILE   = 'summary_ag240.txt'
-TIMEOUT     = 60    # simulation timeout, in seconds
 
 # Utility functions
 ###################
@@ -52,6 +51,7 @@ def run_timeout(command):
     out_file.seek(0);
     out = out_file.read()
     out_file.close()
+    out = out.decode('utf-8')
     if(timed_out):
         out = "FAILED: timeout\n" + out
     return out
@@ -112,7 +112,7 @@ class RubricItem:
             return True
         except subprocess.CalledProcessError as e:
             self.has_err = True
-            self.err += 'vlogan error:\n\n' + e.output + '\n'
+            self.err += 'vlogan error:\n\n' + e.output.decode('utf-8') + '\n'
             return False
 
     def run_vcs(self, m_list):
@@ -125,7 +125,7 @@ class RubricItem:
             except subprocess.CalledProcessError as e:
                 self.has_err = True
                 has_errors = True
-                self.err += 'vcs error:\n\n' + e.output + '\n'
+                self.err += 'vcs error:\n\n' + e.output.decode('utf-8') + '\n'
         return not has_errors
 
     def check_compile(self):
@@ -223,7 +223,7 @@ def write_results(person, errs, summary_fd):
     else:
         text += errs + '\n\n'
     text = text.lstrip()
-    fd = open(RESULT_FILE, 'wb')
+    fd = open(RESULT_FILE, 'w')
     fd.write(text)
     fd.close()
     if len(errs) > 0:
@@ -272,7 +272,8 @@ def json2rubric(json):
     return rubric
 
 def get_args():
-    parser = argparse.ArgumentParser(description='Grade 240 assignments')
+    parser = argparse.ArgumentParser(description='Grade 240 assignments',
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-v', '--verbose', dest='verbose', action='store_true')
     parser.add_argument('-c', '--config', dest='config', action='store',
                         default='config.json',
@@ -286,6 +287,9 @@ def get_args():
     parser.add_argument('-g', '--generate_cfg', dest='ex_cfg', action='store',
                         const='cfg_example.json', default=None, nargs='?',
                         help='generate an example config JSON file')
+    parser.add_argument('--timeout', dest='timeout', action='store',
+                        default=60,
+                        help='seconds to wait for simulation timeout')
     return parser.parse_args()
 
 def make_summ_table(passed, failed):
@@ -341,6 +345,8 @@ def main():
     FORCED = args.force
     global DRY
     DRY = args.dry
+    global TIMEOUT
+    TIMEOUT = args.timeout
     json_path = args.config
     specifics = args.students
 
@@ -354,7 +360,8 @@ def main():
     STAFF_DIR = current_dir
 
     # get student andrew IDs
-    andrews_old = subprocess.check_output(['ls', '..']).strip().split('\n')
+    andrews_old = subprocess.check_output(['ls', '..']).decode('utf-8')
+    andrews_old = andrews_old.strip().split('\n')
     andrews = []
     # preprocess student directories
     for andrew in andrews_old:
@@ -373,11 +380,11 @@ def main():
     rubric = json2rubric(config)
 
     if not DRY:
-        summary_fd = open('{}/{}'.format(STAFF_DIR, SUMM_FILE), 'wb')
+        summary_fd = open('{}/{}'.format(STAFF_DIR, SUMM_FILE), 'w')
     summary_tmp = tempfile.TemporaryFile()
     try:
         print_start()
-        print(pad_str('Grading {}: '.format('STAFF'), 20)),
+        print(pad_str('Grading {}: '.format('STAFF'), 20), end='')
         sys.stdout.flush()
         if VERBOSE:
             print('')
@@ -398,7 +405,7 @@ def main():
                     continue
                 if (DRY):
                     break
-                print(pad_str('Grading {}: '.format(person), 20)),
+                print(pad_str('Grading {}: '.format(person), 20), end='')
                 if VERBOSE:
                     print('')
                 sys.stdout.flush()
@@ -415,7 +422,7 @@ def main():
             for person in andrews:
                 if (DRY):
                     break
-                print(pad_str('Grading {}: '.format(person), 20)),
+                print(pad_str('Grading {}: '.format(person), 20), end='')
                 if VERBOSE:
                     print('')
                 sys.stdout.flush()
@@ -429,10 +436,9 @@ def main():
                     if not VERBOSE:
                         print(tc.format_str('Failed', 'red'))
 
-        tbl = make_summ_table(pass_students, fail_students)
-        print('\n' + tbl)
-
         if not DRY:
+            tbl = make_summ_table(pass_students, fail_students)
+            print('\n' + tbl)
             summ_hdr = make_header('Summary for {}'.format(HWNUM), 80) + '\n'
             summary_fd.write(summ_hdr)
             summary_fd.write(tbl)

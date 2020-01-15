@@ -1,11 +1,10 @@
 # autograde240
 *A tool for autograding 18240 assignments*
 
-Intended for Python 2.7.5, with an intention of moving over to Python 3 in the
-near future.
+Written in Python, ported to Python3.
 
 ## Requirements
-- Python 2.7.5 or newer Python 2 installs
+- Python 3.X
 - Synopsys VCS
 
 ## Usage
