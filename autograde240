@@ -227,7 +227,7 @@ def write_results(person, errs, summary_fd):
     fd.write(text)
     fd.close()
     if len(errs) > 0:
-        summary_fd.write(text)
+        summary_fd.write(text.encode('utf8'))
 
 def grade_person(person, rubric, summary_fd):
     temp_dir = tempfile.mkdtemp()
