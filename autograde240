@@ -469,7 +469,7 @@ def main():
         sys.exit()
     finally:
         summary_tmp.close()
-        if not DRY:
+        if (not DRY) and (not specifics):
             summary_fd.close()
 
 if __name__ == "__main__":
