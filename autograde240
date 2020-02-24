@@ -439,15 +439,19 @@ def main():
         if not DRY:
             tbl = make_summ_table(pass_students, fail_students)
             print('\n' + tbl)
-            summ_hdr = make_header('Summary for {}'.format(HWNUM), 80) + '\n'
-            summary_fd.write(summ_hdr)
-            summary_fd.write(tbl)
-            summary_tmp.seek(0)
-            summary_fd.write(summary_tmp.read())
+            if not (specifics):
+                summ_hdr = make_header('Summary for {}'.format(HWNUM), 80) + '\n'
+                summary_fd.write(summ_hdr)
+                summary_fd.write(tbl)
+                summary_tmp.seek(0)
+                summary_fd.write(summary_tmp.read())
 
         print('\nAutograding complete.')
         if not DRY:
-            print(tc.format_str('Results written to {}'.format(SUMM_FILE), 'line'))
+            if not (specifics):
+                print(tc.format_str('Results written to {}'.format(SUMM_FILE), 'line'))
+            else:
+                print(tc.format_str('Results written to specific folders', 'line'))
         return 0
     except TypeError as e:
         print('TypeError: please check that the config file is valid')
