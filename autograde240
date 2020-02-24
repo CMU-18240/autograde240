@@ -379,7 +379,7 @@ def main():
     HWNUM = config['assignment']
     rubric = json2rubric(config)
 
-    if not DRY:
+    if (not DRY) and (not specifics):
         summary_fd = open('{}/{}'.format(STAFF_DIR, SUMM_FILE), 'w')
     summary_tmp = tempfile.TemporaryFile()
     try:
