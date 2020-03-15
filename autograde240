@@ -200,7 +200,7 @@ def generate_example(outfile):
 def parse_json(json_path):
     if (not os.path.exists(json_path)):
         return None
-    fd = open(json_path, 'r')
+    fd = open(json_path, 'rb')
     try:
         return json.load(fd)
     except Exception as e:
@@ -223,8 +223,8 @@ def write_results(person, errs, summary_fd):
     else:
         text += errs + '\n\n'
     text = text.lstrip()
-    fd = open(RESULT_FILE, 'w')
-    fd.write(text)
+    fd = open(RESULT_FILE, 'wb')
+    fd.write(text.encode('utf8'))
     fd.close()
     if len(errs) > 0:
         summary_fd.write(text.encode('utf8'))
@@ -380,7 +380,7 @@ def main():
     rubric = json2rubric(config)
 
     if (not DRY) and (not specifics):
-        summary_fd = open('{}/{}'.format(STAFF_DIR, SUMM_FILE), 'w')
+        summary_fd = open('{}/{}'.format(STAFF_DIR, SUMM_FILE), 'wb')
     summary_tmp = tempfile.TemporaryFile()
     try:
         print_start()
@@ -441,8 +441,8 @@ def main():
             print('\n' + tbl)
             if not (specifics):
                 summ_hdr = make_header('Summary for {}'.format(HWNUM), 80) + '\n'
-                summary_fd.write(summ_hdr)
-                summary_fd.write(tbl)
+                summary_fd.write(summ_hdr.encode('utf8'))
+                summary_fd.write(tbl.encode('utf8'))
                 summary_tmp.seek(0)
                 summary_fd.write(summary_tmp.read())
 
